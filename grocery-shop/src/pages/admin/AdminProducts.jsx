@@ -13,6 +13,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
+import Pagination from "../../components/Pagination";
 
 function slugify(name = "") {
   return name
@@ -37,7 +38,9 @@ async function uploadProductImage(file) {
 }
 
 export default function AdminProducts() {
+  const ITEMS_PER_PAGE = 8;
   const [items, setItems] = useState([]);
+  const [page, setPage] = useState(1);
   const [promoEnabled, setPromoEnabled] = useState(false);
   const [promoPercent, setPromoPercent] = useState("");
   const [promoPrice, setPromoPrice] = useState("");
@@ -202,6 +205,12 @@ export default function AdminProducts() {
   };
 
   const count = useMemo(() => items.length, [items]);
+  const totalPages = Math.max(1, Math.ceil(items.length / ITEMS_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedItems = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return items.slice(start, start + ITEMS_PER_PAGE);
+  }, [items, currentPage]);
 
   return (
     <div className="card" style={{ maxWidth: 1000 }}>
@@ -332,7 +341,7 @@ export default function AdminProducts() {
       <div className="hr" />
 
       <div style={{ display: "grid", gap: 12 }}>
-        {items.map((p) => (
+        {pagedItems.map((p) => (
           <div key={p.id} className="card" style={{ padding: 14 }}>
             <div className="row" style={{ gap: 12, alignItems: "center" }}>
               <div
@@ -347,9 +356,9 @@ export default function AdminProducts() {
                 }}
               >
                 <img
-                  src={p.imageUrl && p.imageUrl.trim() ? p.imageUrl : "/no-image.png"}
+                  src={p.imageUrl && p.imageUrl.trim() ? p.imageUrl : "/promo-fallback.jpg"}
                   alt={p.name}
-                  onError={(e) => (e.currentTarget.src = "/no-image.png")}
+                  onError={(e) => (e.currentTarget.src = "/promo-fallback.jpg")}
                   style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                 />
               </div>
@@ -371,6 +380,8 @@ export default function AdminProducts() {
         {items.length === 0 && (
           <p className="h2">Няма продукти. Добави първия от формата горе.</p>
         )}
+
+        <Pagination page={currentPage} totalPages={totalPages} onPageChange={setPage} />
       </div>
     </div>
   );

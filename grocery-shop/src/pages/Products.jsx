@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, onSnapshot, query } from "firebase/firestore";
+import { useNavigate } from "react-router-dom";
+
 import { db } from "../firebase";
 import Hero from "../components/Hero";
-
+import Pagination from "../components/Pagination";
 import { useCart } from "../context/CartContext";
 import { useFavorites } from "../context/FavoritesContext";
 import { useAuth } from "../context/AuthContext";
-
-import { useNavigate } from "react-router-dom";
 import { setPendingAction } from "../utils/pendingAction";
 import { trackEvent } from "../utils/analytics";
 import { formatMoneyEUR } from "../utils/money";
@@ -28,52 +28,74 @@ function getPriceView(p) {
   else if (promo.percent != null && !Number.isNaN(Number(promo.percent))) final = base * (1 - Number(promo.percent) / 100);
 
   final = Math.max(0, final);
-  return { base, final, hasPromo: final < base, label: promo.label || "PROMO" };
+  return { base, final, hasPromo: final < base, label: promo.label || "ПРОМО" };
+}
+
+function getImageSrc(url) {
+  const clean = (url || "").trim();
+  if (!clean) return "/promo-fallback.jpg";
+  return clean;
 }
 
 export default function Products({ filters, onCategories, onSubcategories }) {
+  const ITEMS_PER_PAGE = 12;
+
   const [products, setProducts] = useState([]);
   const [cats, setCats] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [page, setPage] = useState(1);
 
   const nav = useNavigate();
   const { user } = useAuth();
   const { add } = useCart();
   const { toggle, isFav } = useFavorites();
-  const [orders, setOrders] = useState([]);
-
-    useEffect(() => {
-    const uo = onSnapshot(query(collection(db, "orders")), (snap) => {
-        setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    return () => uo();
-    }, []);
-
-    const bestSellers = useMemo(() => {
-    const qtyMap = new Map(); // productId -> qty
-    orders.forEach(o => (o.items || []).forEach(it => {
-        const id = it.productId;
-        qtyMap.set(id, (qtyMap.get(id) || 0) + Number(it.qty || 0));
-    }));
-
-    // сортираме продуктите по qty
-    const sorted = [...products]
-        .map(p => ({ ...p, soldQty: qtyMap.get(p.id) || 0 }))
-        .sort((a, b) => b.soldQty - a.soldQty);
-
-    return sorted.filter(p => p.soldQty > 0).slice(0, 6);
-    }, [orders, products]);
-
-  const promoProducts = useMemo(
-    () => products.filter(p => p.promo?.enabled),
-    [products]
-  );
 
   useEffect(() => {
-    const qy = query(collection(db, "products"));
-    const unsub = onSnapshot(qy, (snap) => {
+    const unsubscribeOrders = onSnapshot(query(collection(db, "orders")), (snap) => {
+      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsubscribeOrders();
+  }, []);
+
+  const bestSellers = useMemo(() => {
+    const qtyMap = new Map();
+    orders.forEach((o) =>
+      (o.items || []).forEach((it) => {
+        const id = it.productId;
+        qtyMap.set(id, (qtyMap.get(id) || 0) + Number(it.qty || 0));
+      })
+    );
+
+    const sorted = [...products]
+      .map((p) => ({ ...p, soldQty: qtyMap.get(p.id) || 0 }))
+      .sort((a, b) => b.soldQty - a.soldQty);
+
+    return sorted.filter((p) => p.soldQty > 0).slice(0, 6);
+  }, [orders, products]);
+
+  const promoProducts = useMemo(() => products.filter((p) => p.promo?.enabled), [products]);
+
+  const promoShowcase = useMemo(() => {
+    const primary = promoProducts.slice(0, 12);
+    if (primary.length >= 8) return primary;
+
+    const needed = 8 - primary.length;
+    const filler = products
+      .filter((p) => !p.promo?.enabled)
+      .slice(0, needed)
+      .map((p) => ({
+        ...p,
+        promo: { enabled: true, label: "ОФЕРТА", percent: 10 },
+      }));
+
+    return [...primary, ...filler];
+  }, [promoProducts, products]);
+
+  useEffect(() => {
+    const unsubscribeProducts = onSnapshot(query(collection(db, "products")), (snap) => {
       setProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
-    return () => unsub();
+    return () => unsubscribeProducts();
   }, []);
 
   const computedSubcategories = useMemo(() => {
@@ -96,17 +118,14 @@ export default function Products({ filters, onCategories, onSubcategories }) {
   }, [computedSubcategories, onSubcategories]);
 
   useEffect(() => {
-    const qc = query(collection(db, "categories"));
-    const unsubCats = onSnapshot(qc, (snap) => {
+    const unsubscribeCats = onSnapshot(query(collection(db, "categories")), (snap) => {
       setCats(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
-    return () => unsubCats();
+    return () => unsubscribeCats();
   }, []);
 
-  // ✅ само изчисляваме (без setState към App тук)
   const categories = useMemo(() => ["all", ...cats.map((c) => c.name)], [cats]);
 
-  // ✅ изпращаме към App СЛЕД render: подаваме ПЪЛНИТЕ категории (обекти), използваме names за сравнение
   const lastCatsRef = useRef([]);
   useEffect(() => {
     if (!onCategories) return;
@@ -116,7 +135,6 @@ export default function Products({ filters, onCategories, onSubcategories }) {
     onCategories(cats);
   }, [cats, onCategories]);
 
-  // ✅ филтър
   const filtered = useMemo(() => {
     const t = (filters?.query || "").trim().toLowerCase();
     const cat = filters?.category || "all";
@@ -132,13 +150,19 @@ export default function Products({ filters, onCategories, onSubcategories }) {
       const okCat = cat === "all" ? true : p.category === cat;
       const okSub = sub === "all" ? true : p.subcategory === sub;
       const okText = !t ? true : name.includes(t);
-
       const okMin = minP == null || (!Number.isNaN(minP) && price >= minP);
       const okMax = maxP == null || (!Number.isNaN(maxP) && price <= maxP);
 
       return okCat && okSub && okText && okMin && okMax;
     });
   }, [products, filters]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedFiltered = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filtered.slice(start, start + ITEMS_PER_PAGE);
+  }, [filtered, currentPage]);
 
   const requireAuthThen = (action) => {
     setPendingAction(action);
@@ -148,176 +172,129 @@ export default function Products({ filters, onCategories, onSubcategories }) {
   return (
     <div className="container">
       <Hero
-        title="GroceryShop"
-        subtitle="Свежи продукти • Бързо • Удобно"
-        highlight="🔥 Топ оферти и най-продавани"
+        title="ЕзиГруп"
+        subtitle="Свежи продукти, бърза доставка и лесно плащане."
+        highlight="Топ оферти и най-продавани"
         categories={categories}
         onPickCategory={(c) => {
-          // broadcast pick to App (App listens for 'pickCategory' event)
           try {
-            window.dispatchEvent(new CustomEvent('pickCategory', { detail: c }));
-          } catch (e) {
+            window.dispatchEvent(new CustomEvent("pickCategory", { detail: c }));
+          } catch {
             // noop
           }
         }}
       />
 
-      <div className="hr" style={{ margin: "14px 0" }} />
-
-      {/* твоя UI си остава същия */}
-      <div
-        className="card"
-        style={{
-          background: "rgba(255,255,255,0.92)",
-          padding: 18,
-          borderRadius: 22,
-        }}
-      >
+      <section className="card productsPanel" id="productsList">
         <div className="row">
           <h1 className="h1" style={{ margin: 0 }}>Продукти</h1>
           <div className="spacer" />
-          <span className="badge">
-            Категории: {Math.max(0, categories.length - 1)} | Налични: {products.length}
-          </span>
+          <span className="badge">Категории: {Math.max(0, categories.length - 1)} | Налични: {products.length}</span>
         </div>
 
-        <div id="productsList" />
-
-        <div className="hr" />
-
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
-          <button
-            className="badge"
-            style={{ padding: "10px 14px", borderRadius: 999, fontWeight: 900 }}
-            onClick={() => filters?.setCategory?.("all")}
-          >
-            🧺 Всички
-          </button>
-
-          {cats.map((c) => (
-            <button
-              key={c.id}
-              className="badge"
-              style={{
-                padding: "10px 14px",
-                borderRadius: 999,
-                fontWeight: 900,
-                background: "rgba(17,24,39,0.03)",
-                border: "1px solid rgba(17,24,39,0.08)",
-              }}
-              onClick={() => filters?.setCategory?.(c.name)}
-              title={(c.subcategories || []).join(", ")}
-            >
-              {(c.icon || "🏷️")} {c.name}
-            </button>
-          ))}
-        </div>
-
-        {promoProducts.length > 0 && (
+        {promoShowcase.length > 0 && (
           <>
-            <div className="hr" />
             <div className="row" style={{ alignItems: "baseline" }}>
-              <h2 className="h2" style={{ margin: 0, fontWeight: 950 }}>✨ Промоции</h2>
+              <h2 className="h2" style={{ margin: 0, fontWeight: 900 }}>Промоции и оферти</h2>
               <div className="spacer" />
-              <span className="badge">{promoProducts.length}</span>
+              <span className="badge">{promoShowcase.length}</span>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14, marginTop: 12 }}>
-              {promoProducts.slice(0, 6).map((p) => {
+            <div className="promoGrid">
+              {promoShowcase.map((p) => {
                 const pr = getPriceView(p);
                 return (
-                  <div key={p.id} className="card" style={{ padding: 14, borderRadius: 22 }}>
-                    <div style={{ fontWeight: 950 }}>{p.name}</div>
-                    <div style={{ opacity: 0.7, fontSize: 13 }}>{p.category}</div>
-                    <div style={{ marginTop: 10 }}>
-                      {pr.hasPromo ? (
-                        <div className="row" style={{ gap: 8 }}>
+                  <article key={p.id} className="promoCard">
+                    <div className="promoImageWrap">
+                      <img
+                        src={getImageSrc(p.imageUrl)}
+                        alt={p.name}
+                        onError={(e) => (e.currentTarget.src = "/promo-fallback.jpg")}
+                      />
+                      <span className="promoTag">{pr.label || "ПРОМО"}</span>
+                    </div>
+
+                    <div className="promoBody">
+                      <div style={{ fontWeight: 900, fontSize: 18 }}>{p.name}</div>
+                      <div className="h2" style={{ margin: "2px 0 10px" }}>
+                        {p.category}{p.subcategory ? ` / ${p.subcategory}` : ""}
+                      </div>
+
+                      <div className="row" style={{ gap: 8 }}>
+                        {pr.hasPromo && (
                           <span className="badge" style={{ textDecoration: "line-through", opacity: 0.6 }}>
                             {formatMoneyEUR(pr.base)}
                           </span>
-                          <span className="badge" style={{ fontWeight: 950 }}>
-                            {formatMoneyEUR(pr.final)}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="badge">{formatMoneyEUR(pr.final)}</span>
-                      )}
+                        )}
+                        <span className="badge promoPrice">{formatMoneyEUR(pr.final)}</span>
+                        <div className="spacer" />
+                        <button
+                          className="btn btnPrimary"
+                          style={{ borderRadius: 12, height: 38 }}
+                          onClick={() => {
+                            if (!user) {
+                              requireAuthThen({ type: "ADD_TO_CART", productId: p.id, qty: 1, redirectTo: "/cart" });
+                              return;
+                            }
+                            add(p, 1);
+                            trackEvent("add_to_cart", { productId: p.id, name: p.name, price: p.price, qty: 1, path: "/" }, user);
+                          }}
+                        >
+                          Добави
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  </article>
                 );
               })}
             </div>
-          </>
-        )} 
 
-        {bestSellers.length > 0 && (
-          <>
             <div className="hr" />
-            <div className="row" style={{ alignItems: "baseline" }}>
-              <h2 className="h2" style={{ margin: 0, fontWeight: 950 }}>🔥 Най-продавани</h2>
-              <div className="spacer" />
-              <span className="badge">Top {bestSellers.length}</span>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14, marginTop: 12 }}>
-              {bestSellers.map((p) => (
-                <div key={p.id} className="card" style={{ padding: 14, borderRadius: 22 }}>
-                  <div style={{ fontWeight: 950 }}>{p.name}</div>
-                  <div style={{ opacity: 0.7, fontSize: 13 }}>{p.soldQty} бр. продадени</div>
-                  <div style={{ marginTop: 10 }} className="badge">{formatMoneyEUR(p.price)}</div>
-                </div>
-              ))}
-            </div>
           </>
         )}
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-            gap: 16,
-          }}
-        >
-          {filtered.map((p) => (
-            <div
-              key={p.id}
-              className="card"
-              style={{
-                padding: 14,
-                borderRadius: 22,
-                background: "rgba(255,255,255,0.88)",
-                border: "1px solid rgba(17,24,39,0.06)",
-                boxShadow: "0 10px 22px rgba(17,24,39,0.06)",
-              }}
-            >
-              <div
-                style={{
-                  position: "relative",
-                  borderRadius: 18,
-                  overflow: "hidden",
-                  border: "1px solid rgba(17,24,39,0.08)",
-                  background: "rgba(17,24,39,0.02)",
-                }}
-              >
+        {bestSellers.length > 0 && (
+          <>
+            <div className="row" style={{ alignItems: "baseline" }}>
+              <h2 className="h2" style={{ margin: 0, fontWeight: 900 }}>Най-продавани</h2>
+              <div className="spacer" />
+              <span className="badge">Топ {bestSellers.length}</span>
+            </div>
+
+            <div className="statsGrid">
+              {bestSellers.map((p) => (
+                <div key={p.id} className="statCard">
+                  <div style={{ fontWeight: 900 }}>{p.name}</div>
+                  <div className="h2" style={{ margin: "4px 0 8px" }}>{p.soldQty} продадени</div>
+                  <div className="badge">{formatMoneyEUR(p.price)}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hr" />
+          </>
+        )}
+
+        <div className="productGrid">
+          {pagedFiltered.map((p) => (
+            <article key={p.id} className="productCard">
+              <div className="productImageWrap">
                 {p.promo?.enabled && (
                   <div style={{ position: "absolute", top: 10, left: 10, zIndex: 2 }}>
-                    <span className="badge" style={{ fontWeight: 950 }}>
-                      ✨ {p.promo.label || "PROMO"}
-                    </span>
+                    <span className="badge" style={{ fontWeight: 900 }}>{p.promo.label || "ПРОМО"}</span>
                   </div>
                 )}
 
                 <img
-                  src={p.imageUrl && p.imageUrl.trim() ? p.imageUrl : "/no-image.png"}
+                  src={getImageSrc(p.imageUrl)}
                   alt={p.name}
-                  onError={(e) => (e.currentTarget.src = "/no-image.png")}
-                  style={{ width: "100%", height: 170, objectFit: "cover", display: "block" }}
+                  onError={(e) => (e.currentTarget.src = "/promo-fallback.jpg")}
                 />
               </div>
 
               <div style={{ marginTop: 12, minHeight: 54 }}>
-                <div style={{ fontWeight: 950, fontSize: 16 }}>{p.name}</div>
-                <div style={{ opacity: 0.65, fontSize: 13 }}>
+                <div style={{ fontWeight: 900, fontSize: 16 }}>{p.name}</div>
+                <div className="h2" style={{ margin: 0 }}>
                   {p.category}{p.subcategory ? ` / ${p.subcategory}` : ""}
                 </div>
               </div>
@@ -326,71 +303,74 @@ export default function Products({ filters, onCategories, onSubcategories }) {
                 {(() => {
                   const pr = getPriceView(p);
                   return (
-                    <div className="row" style={{ gap: 10, alignItems: "center" }}>
-                      {pr.hasPromo && (
-                        <span className="badge" style={{ fontWeight: 950 }}>
-                          ✨ {pr.label}
-                        </span>
+                    <div className="row" style={{ gap: 8, alignItems: "center", width: "100%" }}>
+                      {pr.hasPromo ? (
+                        <>
+                          <span className="badge" style={{ textDecoration: "line-through", opacity: 0.6 }}>{formatMoneyEUR(pr.base)}</span>
+                          <span className="badge" style={{ fontWeight: 900 }}>{formatMoneyEUR(pr.final)}</span>
+                        </>
+                      ) : (
+                        <span className="badge">{formatMoneyEUR(pr.final)}</span>
                       )}
 
                       <div className="spacer" />
 
-                      {pr.hasPromo ? (
-                        <div className="row" style={{ gap: 8 }}>
-                          <span className="badge" style={{ textDecoration: "line-through", opacity: 0.6 }}>
-                            {formatMoneyEUR(pr.base)}
-                          </span>
-                          <span className="badge" style={{ fontWeight: 950 }}>
-                            {formatMoneyEUR(pr.final)}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="badge">{formatMoneyEUR(pr.final)}</span>
-                      )}
+                      <button
+                        className="btn"
+                        style={{
+                          borderRadius: 999,
+                          width: 44,
+                          minWidth: 44,
+                          padding: 0,
+                          fontSize: 20,
+                          lineHeight: 1,
+                          color: isFav(p.id) ? "#dc2626" : "#6b7280",
+                          borderColor: isFav(p.id) ? "#f1b4b4" : undefined,
+                          background: isFav(p.id) ? "#fff1f1" : undefined,
+                        }}
+                        title={isFav(p.id) ? "Премахни от любими" : "Добави в любими"}
+                        onClick={() => {
+                          if (!user) {
+                            requireAuthThen({ type: "TOGGLE_FAVORITE", productId: p.id, redirectTo: "/" });
+                            return;
+                          }
+                          toggle(p.id);
+                          trackEvent("toggle_favorite", { productId: p.id, name: p.name, path: "/" }, user);
+                        }}
+                      >
+                        {isFav(p.id) ? "\u2665" : "\u2661"}
+                      </button>
                     </div>
                   );
                 })()}
-                <button
-                  className="btn"
-                  style={{ borderRadius: 999, width: 46, padding: 0 }}
-                  onClick={() => {
-                    if (!user) {
-                      requireAuthThen({ type: "TOGGLE_FAVORITE", productId: p.id, redirectTo: "/" });
-                      return;
-                    }
-                        toggle(p.id);
-                        trackEvent("toggle_favorite", { productId: p.id, name: p.name, path: "/" }, user);
-                  }}
-                >
-                  {isFav(p.id) ? "♥" : "♡"}
-                </button>
               </div>
 
               <button
                 className="btn btnPrimary"
-                style={{ width: "100%", marginTop: 12, borderRadius: 16, height: 48, fontWeight: 950 }}
+                style={{ width: "100%", marginTop: 12, borderRadius: 14, height: 46, fontWeight: 900 }}
                 onClick={() => {
                   if (!user) {
                     requireAuthThen({ type: "ADD_TO_CART", productId: p.id, qty: 1, redirectTo: "/cart" });
                     return;
                   }
-                    add(p, 1);
-                    trackEvent("add_to_cart", { productId: p.id, name: p.name, price: p.price, qty: 1, path: "/" }, user);
+                  add(p, 1);
+                  trackEvent("add_to_cart", { productId: p.id, name: p.name, price: p.price, qty: 1, path: "/" }, user);
                 }}
               >
-                Добави в количка
+                Добави в количката
               </button>
-            </div>
+            </article>
           ))}
         </div>
 
+        <Pagination page={currentPage} totalPages={totalPages} onPageChange={setPage} />
+
         {filtered.length === 0 && (
           <p className="h2" style={{ marginTop: 16 }}>
-            Няма намерени продукти по този филтър.
+            Няма продукти по зададените филтри.
           </p>
         )}
-      </div>
-      
+      </section>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
@@ -16,9 +16,15 @@ export default function Cart() {
   const [method, setMethod] = useState("stripe"); // stripe | cod
   const [paying, setPaying] = useState(false);
   const [err, setErr] = useState("");
+  const [toast, setToast] = useState("");
   const totalEUR = useMemo(() => Number(total || 0), [total]);
 
-  // 💳 Stripe
+  const showToast = (message) => {
+    setToast(message);
+    window.setTimeout(() => setToast(""), 2600);
+  };
+
+  // Stripe
   const payWithStripe = async () => {
     setErr("");
     if (!user) return setErr("Трябва да си логнат.");
@@ -30,8 +36,8 @@ export default function Cart() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          orderId: "", // ще се попълни от webhook-а
-          items: items.map(i => ({
+          orderId: "", // попълва се от webhook-а
+          items: items.map((i) => ({
             productId: i.id,
             name: i.name,
             price: Number(i.price || 0),
@@ -51,7 +57,7 @@ export default function Cart() {
     }
   };
 
-  // 💵 Наложен платеж
+  // Наложен платеж
   const payWithCOD = async () => {
     setErr("");
     if (!user) return setErr("Трябва да си логнат.");
@@ -62,7 +68,7 @@ export default function Cart() {
       await addDoc(collection(db, "orders"), {
         userId: user.uid,
         email: user.email,
-        items: items.map(i => ({
+        items: items.map((i) => ({
           productId: i.id,
           name: i.name,
           price: Number(i.price || 0),
@@ -76,7 +82,7 @@ export default function Cart() {
       });
 
       clear();
-      alert("✅ Поръчката е приета (Наложен платеж)");
+      showToast("Поръчката е приета успешно.");
     } catch (e) {
       console.error(e);
       setErr("Грешка при създаване на поръчка.");
@@ -100,13 +106,12 @@ export default function Cart() {
           <p className="h2">Количката е празна.</p>
         ) : (
           <>
-            {/* 🛒 ITEMS */}
             <div style={{ display: "grid", gap: 12 }}>
               {items.map((x) => (
                 <div key={x.id} className="card" style={{ padding: 12 }}>
                   <div className="row" style={{ alignItems: "center", gap: 12 }}>
                     <img
-                      src={x.imageUrl || "/no-image.png"}
+                      src={x.imageUrl || "/promo-fallback.jpg"}
                       alt={x.name}
                       style={{
                         width: 80,
@@ -133,7 +138,7 @@ export default function Cart() {
                     />
 
                     <button className="btn btnDanger" onClick={() => remove(x.id)}>
-                      ✕
+                      X
                     </button>
                   </div>
                 </div>
@@ -142,7 +147,6 @@ export default function Cart() {
 
             <div className="hr" />
 
-            {/* 💰 TOTAL */}
             <div className="row">
               <div style={{ fontWeight: 950 }}>Общо:</div>
               <div className="spacer" />
@@ -151,23 +155,14 @@ export default function Cart() {
 
             <div className="hr" />
 
-            {/* 💳 PAYMENT METHOD */}
             <div style={{ display: "grid", gap: 10 }}>
               <label className="row" style={{ gap: 10 }}>
-                <input
-                  type="radio"
-                  checked={method === "stripe"}
-                  onChange={() => setMethod("stripe")}
-                />
+                <input type="radio" checked={method === "stripe"} onChange={() => setMethod("stripe")} />
                 Плащане с карта (Stripe)
               </label>
 
               <label className="row" style={{ gap: 10 }}>
-                <input
-                  type="radio"
-                  checked={method === "cod"}
-                  onChange={() => setMethod("cod")}
-                />
+                <input type="radio" checked={method === "cod"} onChange={() => setMethod("cod")} />
                 Наложен платеж
               </label>
             </div>
@@ -195,6 +190,12 @@ export default function Cart() {
           </>
         )}
       </div>
+
+      {toast && (
+        <div className="toastOrder" role="status" aria-live="polite">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
