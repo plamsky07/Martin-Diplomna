@@ -15,20 +15,20 @@ export default function AuthShell({ title, subtitle, children }) {
           <h1 className="h1">{title}</h1>
           <p className="h2">{subtitle}</p>
 
-          <div className="card" style={{ background: "rgba(255,255,255,0.06)" }}>
+          <div className="card">
             <div className="row">
-              <span className="badge">🛒 Продукти</span>
-              <span className="badge">♥ Любими</span>
-              <span className="badge">🧾 Количка</span>
-              <span className="badge">🔐 Admin</span>
+              <span className="badge">Продукти</span>
+              <span className="badge">Любими</span>
+              <span className="badge">Количка</span>
+              <span className="badge">Админ</span>
             </div>
             <p className="h2" style={{ marginTop: 12 }}>
-              Firebase Auth + Firestore + Storage. Гост разглежда, акаунт за добавяне.
+              Интеграция с Firebase Auth, Firestore и Storage за пазаруване с потребителски профил.
             </p>
           </div>
         </div>
 
-        <div className="card" style={{ maxWidth: 520, marginLeft: "auto", width: "100%" }}>
+        <div className="card" style={{ maxWidth: 520, marginLeft: "auto", width: "100%", boxShadow: "var(--shadow)" }}>
           {children}
         </div>
       </div>
