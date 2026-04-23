@@ -102,12 +102,7 @@ function AppShell({
     <>
       <Tracker />
 
-      <Navbar
-        categories={categoryNames}
-        subcategories={subcategories}
-        filters={filters}
-        onSearchChange={onSearchChange}
-      />
+      <Navbar />
 
       <AnalyticsWatcher />
 
@@ -119,6 +114,9 @@ function AppShell({
               element={
                 <Products
                   filters={filters}
+                  categories={categoryNames}
+                  subcategories={subcategories}
+                  onSearchChange={onSearchChange}
                   onCategories={(cats) => setCategories(cats)}
                   onSubcategories={(subs) => setSubcategories(subs)}
                 />

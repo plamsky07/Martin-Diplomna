@@ -116,6 +116,18 @@ export default function Orders() {
                       <div style={{ display: "grid", gap: 10 }}>
                         {(o.items || []).map((it, idx) => (
                           <div key={idx} className="row" style={{ gap: 12, alignItems: "center" }}>
+                            <img
+                              src={it.imageUrl || "/promo-fallback.jpg"}
+                              alt={it.name || "Product"}
+                              onError={(e) => (e.currentTarget.src = "/promo-fallback.jpg")}
+                              style={{
+                                width: 56,
+                                height: 44,
+                                objectFit: "cover",
+                                borderRadius: 10,
+                                border: "1px solid rgba(17,24,39,0.08)",
+                              }}
+                            />
                             <div style={{ fontWeight: 900, minWidth: 220 }}>
                               {it.name || "Product"}
                             </div>

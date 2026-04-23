@@ -25,6 +25,11 @@ export default function Account() {
   // ✅ My orders (последни 5)
   useEffect(() => {
     if (!user?.uid) return;
+    if (profile?.role === "admin") {
+      setOrders([]);
+      return;
+    }
+
     const qy = query(
       collection(db, "orders"),
       where("userId", "==", user.uid),
@@ -35,7 +40,7 @@ export default function Account() {
       setOrders(all.slice(0, 5));
     });
     return () => unsub();
-  }, [user?.uid]);
+  }, [profile?.role, user?.uid]);
 
   const save = async () => {
     setMsg(""); setErr("");
@@ -85,6 +90,7 @@ export default function Account() {
     const r = profile?.role || "user";
     return r === "admin" ? "admin" : "user";
   }, [profile?.role]);
+  const isAdmin = roleLabel === "admin";
 
   return (
     <div className="container">
@@ -112,9 +118,9 @@ export default function Account() {
         <div className="hr" />
 
         {/* 3 cards */}
-        <div style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+        <div style={{ display: "grid", gap: 14, gridTemplateColumns: isAdmin ? "repeat(2, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))" }}>
           {/* Profile */}
-          <div className="card" style={{ padding: 16, borderRadius: 22, background: "rgba(17,24,39,0.02)", border: "1px solid rgba(17,24,39,0.06)" }}>
+          {!isAdmin && <div className="card" style={{ padding: 16, borderRadius: 22, background: "rgba(17,24,39,0.02)", border: "1px solid rgba(17,24,39,0.06)" }}>
             <div style={{ fontWeight: 950, marginBottom: 10 }}>🧾 Профил</div>
 
             <div className="h2" style={{ margin: "6px 0" }}>Имейл</div>
@@ -140,7 +146,7 @@ export default function Account() {
 
             {msg ? <div className="success" style={{ marginTop: 10 }}>{msg}</div> : null}
             {err ? <div className="error" style={{ marginTop: 10 }}>{err}</div> : null}
-          </div>
+          </div>}
 
           {/* Security */}
           <div className="card" style={{ padding: 16, borderRadius: 22, background: "rgba(17,24,39,0.02)", border: "1px solid rgba(17,24,39,0.06)" }}>

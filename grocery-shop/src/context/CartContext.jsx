@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useAuth } from "./AuthContext";
 
 const CartContext = createContext(null);
@@ -22,7 +22,7 @@ export function CartProvider({ children }) {
     localStorage.setItem(k, JSON.stringify(items));
   }, [items, user?.uid]);
 
- const add = (product, qty = 1) => {
+ const add = useCallback((product, qty = 1) => {
   setItems((prev) => {
     const found = prev.find((x) => x.id === product.id);
     if (found) {
@@ -47,17 +47,17 @@ export function CartProvider({ children }) {
       },
     ];
   });
-};
+}, []);
 
 
-  const remove = (id) => setItems((prev) => prev.filter((x) => x.id !== id));
-  const setQty = (id, qty) => setItems((prev) => prev.map((x) => (x.id === id ? { ...x, qty: Math.max(1, qty) } : x)));
-  const clear = () => setItems([]);
+  const remove = useCallback((id) => setItems((prev) => prev.filter((x) => x.id !== id)), []);
+  const setQty = useCallback((id, qty) => setItems((prev) => prev.map((x) => (x.id === id ? { ...x, qty: Math.max(1, qty) } : x))), []);
+  const clear = useCallback(() => setItems([]), []);
 
   const count = items.reduce((s, x) => s + x.qty, 0);
   const total = items.reduce((s, x) => s + x.qty * Number(x.price || 0), 0);
 
-  const value = useMemo(() => ({ items, add, remove, setQty, clear, count, total }), [items, count, total]);
+  const value = useMemo(() => ({ items, add, remove, setQty, clear, count, total }), [items, add, remove, setQty, clear, count, total]);
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
 

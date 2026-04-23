@@ -1,19 +1,22 @@
 ﻿import { useMemo, useState } from "react";
-import { loadStripe } from "@stripe/stripe-js";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
+import { useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { db } from "../firebase";
 
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { formatMoneyEUR } from "../utils/money";
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+const STRIPE_ENABLED = import.meta.env.VITE_STRIPE_ENABLED === "true";
 
 export default function Cart() {
   const { user } = useAuth();
   const { items, total, setQty, remove, clear } = useCart();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
-  const [method, setMethod] = useState("stripe"); // stripe | cod
+  const [method, setMethod] = useState(STRIPE_ENABLED ? "stripe" : "cod"); // stripe | cod
   const [paying, setPaying] = useState(false);
   const [err, setErr] = useState("");
   const [toast, setToast] = useState("");
@@ -24,35 +27,71 @@ export default function Cart() {
     window.setTimeout(() => setToast(""), 2600);
   };
 
+  useEffect(() => {
+    if (searchParams.get("paid") === "1") {
+      clear();
+      showToast("Плащането е успешно. Поръчката е приета.");
+      navigate("/cart", { replace: true });
+    }
+
+    if (searchParams.get("canceled") === "1") {
+      setErr("Плащането е отказано. Количката е запазена.");
+      navigate("/cart", { replace: true });
+    }
+  }, [clear, navigate, searchParams]);
+
+  const orderItems = () =>
+    items.map((i) => ({
+      productId: i.id,
+      name: i.name,
+      price: Number(i.price || 0),
+      qty: Number(i.qty || 1),
+      imageUrl: i.imageUrl || "",
+    }));
+
   // Stripe
   const payWithStripe = async () => {
     setErr("");
+    if (!STRIPE_ENABLED) {
+      return setErr("Stripe checkout още не е активиран в .env. Сложи VITE_STRIPE_ENABLED=true и рестартирай dev server-а.");
+    }
     if (!user) return setErr("Трябва да си логнат.");
     if (!items.length) return setErr("Количката е празна.");
 
     setPaying(true);
+    let orderRef = null;
     try {
+      orderRef = await addDoc(collection(db, "orders"), {
+        userId: user.uid,
+        email: user.email,
+        items: orderItems(),
+        total: totalEUR,
+        currency: "EUR",
+        paymentMethod: "stripe",
+        status: "pending_payment",
+        createdAt: serverTimestamp(),
+      });
+
       const res = await fetch(import.meta.env.VITE_STRIPE_CREATE_CHECKOUT_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          orderId: "", // попълва се от webhook-а
-          items: items.map((i) => ({
-            productId: i.id,
-            name: i.name,
-            price: Number(i.price || 0),
-            qty: Number(i.qty || 1),
-          })),
+          orderId: orderRef.id,
+          items: orderItems(),
+          clientUrl: window.location.origin,
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.url) throw new Error("Stripe error");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) throw new Error(data.error || "Stripe error");
 
       window.location.href = data.url;
     } catch (e) {
       console.error(e);
-      setErr("Грешка при Stripe плащане.");
+      if (orderRef?.id) {
+        await deleteDoc(doc(db, "orders", orderRef.id)).catch(() => {});
+      }
+      setErr("Stripe checkout не е активен в момента. Backend функцията връща CORS грешка и трябва да се deploy-не наново.");
       setPaying(false);
     }
   };
@@ -73,6 +112,7 @@ export default function Cart() {
           name: i.name,
           price: Number(i.price || 0),
           qty: Number(i.qty || 1),
+          imageUrl: i.imageUrl || "",
         })),
         total: totalEUR,
         currency: "EUR",

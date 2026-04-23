@@ -196,7 +196,19 @@ export default function AdminOrders() {
               <div style={{ display: "grid", gap: 6 }}>
                 {(o.items || []).map((it, idx) => (
                   <div key={idx} className="row" style={{ gap: 10, alignItems: "center" }}>
-                    <div style={{ fontWeight: 900 }}>{it.name}</div>
+                    <img
+                      src={it.imageUrl || "/promo-fallback.jpg"}
+                      alt={it.name || "Product"}
+                      onError={(e) => (e.currentTarget.src = "/promo-fallback.jpg")}
+                      style={{
+                        width: 54,
+                        height: 42,
+                        objectFit: "cover",
+                        borderRadius: 10,
+                        border: "1px solid rgba(17,24,39,0.08)",
+                      }}
+                    />
+                    <div style={{ fontWeight: 900 }}>{it.name || "Product"}</div>
                     <div className="spacer" />
                     <span className="badge">x{it.qty}</span>
                     <span className="badge">{formatMoneyEUR(Number(it.price || 0))}</span>

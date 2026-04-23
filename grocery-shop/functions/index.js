@@ -8,8 +8,14 @@ admin.initializeApp();
 
 const app = express();
 
-// ✅ CORS за локално
-app.use(cors({ origin: true }));
+const corsHandler = cors({
+  origin: true,
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "stripe-signature"],
+});
+
+app.use(corsHandler);
+app.options("*", corsHandler);
 
 // ⚠️ За webhook трябва RAW body
 app.post(
@@ -62,16 +68,32 @@ app.use(express.json());
 // ✅ Create Stripe Checkout Session
 app.post("/create-checkout-session", async (req, res) => {
   try {
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return res.status(500).json({ error: "Missing STRIPE_SECRET_KEY" });
+    }
 
-    const { items, orderId } = req.body;
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: "2026-02-25.clover",
+    });
+
+    const { items, orderId, clientUrl } = req.body || {};
+    const safeItems = Array.isArray(items) ? items : [];
+
+    if (!orderId) return res.status(400).json({ error: "Missing orderId" });
+    if (!safeItems.length) return res.status(400).json({ error: "Cart is empty" });
+
+    const baseUrl = (clientUrl || process.env.CLIENT_URL || "").replace(/\/$/, "");
+    if (!baseUrl) return res.status(400).json({ error: "Missing client URL" });
 
     // items = [{ name, price, qty }]
-    const line_items = (items || []).map((it) => ({
+    const line_items = safeItems.map((it) => ({
       quantity: Number(it.qty || 1),
       price_data: {
         currency: "eur",
-        product_data: { name: it.name || "Product" },
+        product_data: {
+          name: it.name || "Product",
+          ...(it.imageUrl ? { images: [it.imageUrl] } : {}),
+        },
         unit_amount: Math.round(Number(it.price || 0) * 100), // евро -> центове
       },
     }));
@@ -79,15 +101,15 @@ app.post("/create-checkout-session", async (req, res) => {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items,
-      success_url: `${process.env.CLIENT_URL}/cart?paid=1`,
-      cancel_url: `${process.env.CLIENT_URL}/cart?canceled=1`,
-      metadata: { orderId: orderId || "" },
+      success_url: `${baseUrl}/cart?paid=1&orderId=${encodeURIComponent(orderId)}`,
+      cancel_url: `${baseUrl}/cart?canceled=1&orderId=${encodeURIComponent(orderId)}`,
+      metadata: { orderId },
     });
 
     res.json({ url: session.url });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: "Failed to create session" });
+    res.status(500).json({ error: e.message || "Failed to create session" });
   }
 });
 

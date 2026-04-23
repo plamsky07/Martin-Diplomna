@@ -37,3 +37,5 @@ serviceAccountKey.json
 functions/.env
 functions/.env.*
 .vs/
+.vercel
+.env*.local

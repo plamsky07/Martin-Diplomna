@@ -1,13 +1,17 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
-  "installCommand": "cd grocery-shop && npm install",
+  "installCommand": "npm install && cd grocery-shop && npm install",
+  "devCommand": "cd grocery-shop && npm run dev -- --host 0.0.0.0 --port $PORT",
   "buildCommand": "cd grocery-shop && npm run build",
   "outputDirectory": "grocery-shop/dist",
-  "rewrites": [
+  "routes": [
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }

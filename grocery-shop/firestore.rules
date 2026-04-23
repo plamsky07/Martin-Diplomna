@@ -37,9 +37,15 @@ service cloud.firestore {
     // ✅ Users: own profile; admin all
     match /users/{uid} {
       allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
-      allow create: if signedIn() && request.auth.uid == uid;
-      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid);
-      allow delete: if isAdmin();
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.role == "user";
+      allow update: if isAdmin()
+        || (signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.banned == resource.data.banned);
+      allow delete: if isAdmin() || (signedIn() && request.auth.uid == uid);
     }
   }
 }

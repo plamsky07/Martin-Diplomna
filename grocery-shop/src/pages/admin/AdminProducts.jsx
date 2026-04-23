@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { db, storage } from "../../firebase";
+import { db } from "../../firebase";
 import { CATEGORY_TREE } from "../../utils/categories";
 import {
   addDoc,
@@ -12,8 +12,8 @@ import {
   updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 import Pagination from "../../components/Pagination";
+import { supabase } from "../../utils/supabaseClient";
 
 function slugify(name = "") {
   return name
@@ -24,17 +24,20 @@ function slugify(name = "") {
 }
 
 async function uploadProductImage(file) {
+  const bucket = import.meta.env.VITE_SUPABASE_PRODUCT_BUCKET || "product-images";
   const safeName = slugify(file.name) || "image";
-  const path = `products/${Date.now()}-${safeName}`;
-  const fileRef = ref(storage, path);
+  const path = `products/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
 
-  const task = uploadBytesResumable(fileRef, file);
-
-  await new Promise((resolve, reject) => {
-    task.on("state_changed", null, reject, resolve);
+  const { error } = await supabase.storage.from(bucket).upload(path, file, {
+    cacheControl: "3600",
+    contentType: file.type || "image/jpeg",
+    upsert: false,
   });
 
-  return await getDownloadURL(task.snapshot.ref);
+  if (error) throw error;
+
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return data.publicUrl;
 }
 
 export default function AdminProducts() {
@@ -188,7 +191,7 @@ export default function AdminProducts() {
       resetForm();
     } catch (e2) {
       console.log(e2);
-      setErr("Грешка при запис/качване. Провери Storage правилата и пробвай пак.");
+      setErr(`Грешка при запис/качване: ${e2?.message || "провери Supabase bucket и Storage policies."}`);
     } finally {
       setSaving(false);
     }

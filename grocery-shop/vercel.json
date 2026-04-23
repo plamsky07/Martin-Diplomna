@@ -1,0 +1,5 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "devCommand": "npm run dev -- --host 0.0.0.0 --port $PORT"
+}

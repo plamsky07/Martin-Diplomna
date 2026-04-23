@@ -37,7 +37,37 @@ function getImageSrc(url) {
   return clean;
 }
 
-export default function Products({ filters, onCategories, onSubcategories }) {
+function normalizeSubcategories(input) {
+  if (!input) return [];
+  if (Array.isArray(input)) {
+    if (input.length === 1 && typeof input[0] === "string" && input[0].includes(",")) {
+      return input[0]
+        .split(",")
+        .map((s) => s.replaceAll('"', "").trim())
+        .filter(Boolean);
+    }
+    return input
+      .filter((s) => typeof s === "string")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  if (typeof input === "string") {
+    return input
+      .split(",")
+      .map((s) => s.replaceAll('"', "").trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+export default function Products({
+  filters,
+  categories: navCategories = [],
+  subcategories = [],
+  onSearchChange,
+  onCategories,
+  onSubcategories,
+}) {
   const ITEMS_PER_PAGE = 12;
 
   const [products, setProducts] = useState([]);
@@ -46,16 +76,18 @@ export default function Products({ filters, onCategories, onSubcategories }) {
   const [page, setPage] = useState(1);
 
   const nav = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { add } = useCart();
   const { toggle, isFav } = useFavorites();
 
   useEffect(() => {
+    if (profile?.role !== "admin") return;
+
     const unsubscribeOrders = onSnapshot(query(collection(db, "orders")), (snap) => {
       setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
     return () => unsubscribeOrders();
-  }, []);
+  }, [profile?.role]);
 
   const bestSellers = useMemo(() => {
     const qtyMap = new Map();
@@ -125,6 +157,24 @@ export default function Products({ filters, onCategories, onSubcategories }) {
   }, []);
 
   const categories = useMemo(() => ["all", ...cats.map((c) => c.name)], [cats]);
+  const filterCategories = navCategories.length ? navCategories : categories;
+  const effectiveSubs = useMemo(() => normalizeSubcategories(subcategories), [subcategories]);
+
+  const q = filters?.query ?? "";
+  const cat = filters?.category ?? "all";
+  const sub = filters?.subcategory ?? "all";
+  const minPrice = filters?.minPrice ?? "";
+  const maxPrice = filters?.maxPrice ?? "";
+
+  const emit = (next = {}) => {
+    onSearchChange?.({
+      query: next.query ?? q,
+      category: next.category ?? cat,
+      subcategory: next.subcategory ?? sub,
+      minPrice: next.minPrice ?? minPrice,
+      maxPrice: next.maxPrice ?? maxPrice,
+    });
+  };
 
   const lastCatsRef = useRef([]);
   useEffect(() => {
@@ -186,6 +236,67 @@ export default function Products({ filters, onCategories, onSubcategories }) {
       />
 
       <section className="card productsPanel" id="productsList">
+        <div className="productFilterBar">
+          <select
+            className="input"
+            value={cat}
+            onChange={(e) => emit({ category: e.target.value, subcategory: "all" })}
+          >
+            <option value="all">Всички категории</option>
+            {filterCategories.filter((c) => c && c !== "all").map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+
+          <select
+            className="input"
+            value={sub}
+            onChange={(e) => emit({ subcategory: e.target.value })}
+            disabled={effectiveSubs.length === 0}
+          >
+            <option value="all">Всички подкатегории</option>
+            {effectiveSubs.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+
+          <input
+            className="input"
+            placeholder="Мин. цена"
+            inputMode="decimal"
+            value={minPrice}
+            onChange={(e) => emit({ minPrice: e.target.value })}
+          />
+
+          <input
+            className="input"
+            placeholder="Макс. цена"
+            inputMode="decimal"
+            value={maxPrice}
+            onChange={(e) => emit({ maxPrice: e.target.value })}
+          />
+
+          <input
+            className="input"
+            placeholder="Търсене на продукти..."
+            value={q}
+            onChange={(e) => emit({ query: e.target.value })}
+          />
+
+          <button className="btn btnPrimary" onClick={() => emit()}>
+            Търси
+          </button>
+
+          <button
+            className="btn"
+            onClick={() => emit({ query: "", category: "all", subcategory: "all", minPrice: "", maxPrice: "" })}
+          >
+            Изчисти
+          </button>
+        </div>
+
+        <div className="hr" />
+
         <div className="row">
           <h1 className="h1" style={{ margin: 0 }}>Продукти</h1>
           <div className="spacer" />
