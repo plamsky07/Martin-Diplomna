@@ -167,6 +167,7 @@ export default function Products({
   const maxPrice = filters?.maxPrice ?? "";
 
   const emit = (next = {}) => {
+    setPage(1);
     onSearchChange?.({
       query: next.query ?? q,
       category: next.category ?? cat,
@@ -227,11 +228,8 @@ export default function Products({
         highlight="Топ оферти и най-продавани"
         categories={categories}
         onPickCategory={(c) => {
-          try {
-            window.dispatchEvent(new CustomEvent("pickCategory", { detail: c }));
-          } catch {
-            // noop
-          }
+          emit({ category: c, subcategory: "all" });
+          document.getElementById("productsList")?.scrollIntoView({ behavior: "smooth", block: "start" });
         }}
       />
 
