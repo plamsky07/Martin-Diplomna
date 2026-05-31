@@ -8,6 +8,13 @@ function setCors(res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
+function sendJson(res, statusCode, data) {
+  setCors(res);
+  res.statusCode = statusCode;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  return res.end(JSON.stringify(data));
+}
+
 function readLocalEnv(name) {
   for (const fileName of [".env.local", ".env", "grocery-shop/.env.local", "grocery-shop/.env"]) {
     const filePath = join(process.cwd(), fileName);
@@ -33,13 +40,13 @@ module.exports = async function handler(req, res) {
     }
 
     if (req.method !== "POST") {
-      return res.status(405).json({ error: "Method not allowed" });
+      return sendJson(res, 405, { error: "Method not allowed" });
     }
 
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY || readLocalEnv("STRIPE_SECRET_KEY");
 
     if (!stripeSecretKey) {
-      return res.status(500).json({ error: "Missing STRIPE_SECRET_KEY" });
+      return sendJson(res, 500, { error: "Missing STRIPE_SECRET_KEY" });
     }
 
     const stripe = new Stripe(stripeSecretKey, {
@@ -49,14 +56,14 @@ module.exports = async function handler(req, res) {
     const { items, orderId, clientUrl } = req.body || {};
     const safeItems = Array.isArray(items) ? items : [];
 
-    if (!orderId) return res.status(400).json({ error: "Missing orderId" });
-    if (!safeItems.length) return res.status(400).json({ error: "Cart is empty" });
+    if (!orderId) return sendJson(res, 400, { error: "Missing orderId" });
+    if (!safeItems.length) return sendJson(res, 400, { error: "Cart is empty" });
 
     const origin = req.headers.origin ? String(req.headers.origin) : "";
     const host = req.headers.host ? `https://${req.headers.host}` : "";
     const baseUrl = String(clientUrl || origin || host).replace(/\/$/, "");
 
-    if (!baseUrl) return res.status(400).json({ error: "Missing client URL" });
+    if (!baseUrl) return sendJson(res, 400, { error: "Missing client URL" });
 
     const line_items = safeItems.map((item) => ({
       quantity: Math.max(1, Number(item.qty || 1)),
@@ -78,10 +85,9 @@ module.exports = async function handler(req, res) {
       metadata: { orderId },
     });
 
-    return res.status(200).json({ url: session.url });
+    return sendJson(res, 200, { url: session.url });
   } catch (error) {
     console.error("Stripe checkout error:", error);
-    setCors(res);
-    return res.status(500).json({ error: error.message || "Failed to create checkout session" });
+    return sendJson(res, 500, { error: error.message || "Failed to create checkout session" });
   }
 };
