@@ -177,6 +177,11 @@ export default function Products({
     });
   };
 
+  const pickCategory = (category) => {
+    emit({ category, subcategory: "all" });
+    document.getElementById("productsList")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const lastCatsRef = useRef([]);
   useEffect(() => {
     if (!onCategories) return;
@@ -227,10 +232,8 @@ export default function Products({
         subtitle="Свежи продукти, бърза доставка и лесно плащане."
         highlight="Топ оферти и най-продавани"
         categories={categories}
-        onPickCategory={(c) => {
-          emit({ category: c, subcategory: "all" });
-          document.getElementById("productsList")?.scrollIntoView({ behavior: "smooth", block: "start" });
-        }}
+        selectedCategory={cat}
+        onPickCategory={pickCategory}
       />
 
       <section className="card productsPanel" id="productsList">

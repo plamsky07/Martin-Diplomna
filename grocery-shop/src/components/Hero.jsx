@@ -7,6 +7,7 @@ export default function Hero({
   highlight = "Топ оферти и най-продавани",
   imageUrl = "/image.png",
   categories = [],
+  selectedCategory = "all",
   onPickCategory,
 }) {
   const chips = useMemo(() => {
@@ -56,14 +57,19 @@ export default function Hero({
               </div>
 
               <div className="row" style={{ gap: 10 }}>
-                <button className="btn chipBtn" onClick={() => onPickCategory?.("all")}>
+                <button
+                  className={`btn chipBtn${selectedCategory === "all" ? " active" : ""}`}
+                  type="button"
+                  onClick={() => onPickCategory?.("all")}
+                >
                   Всички
                 </button>
 
                 {chips.map((c) => (
                   <button
                     key={c}
-                    className="btn chipBtn"
+                    className={`btn chipBtn${selectedCategory === c ? " active" : ""}`}
+                    type="button"
                     style={{ background: "#e9f7f5", borderColor: "#b9dfda", color: "#0f5d58" }}
                     onClick={() => onPickCategory?.(c)}
                     title={`Филтрирай по ${c}`}
