@@ -1,4 +1,3 @@
-const Stripe = require("stripe");
 const { existsSync, readFileSync } = require("node:fs");
 const { join } = require("node:path");
 
@@ -13,6 +12,19 @@ function sendJson(res, statusCode, data) {
   res.statusCode = statusCode;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   return res.end(JSON.stringify(data));
+}
+
+function appendLineItem(params, item, index) {
+  params.append(`line_items[${index}][quantity]`, String(Math.max(1, Number(item.qty || 1))));
+  params.append(`line_items[${index}][price_data][currency]`, "eur");
+  params.append(`line_items[${index}][price_data][product_data][name]`, item.name || "Product");
+  if (item.imageUrl) {
+    params.append(`line_items[${index}][price_data][product_data][images][0]`, item.imageUrl);
+  }
+  params.append(
+    `line_items[${index}][price_data][unit_amount]`,
+    String(Math.round(Number(item.price || 0) * 100))
+  );
 }
 
 function readLocalEnv(name) {
@@ -49,10 +61,6 @@ module.exports = async function handler(req, res) {
       return sendJson(res, 500, { error: "Missing STRIPE_SECRET_KEY" });
     }
 
-    const stripe = new Stripe(stripeSecretKey, {
-      apiVersion: "2026-02-25.clover",
-    });
-
     const { items, orderId, clientUrl } = req.body || {};
     const safeItems = Array.isArray(items) ? items : [];
 
@@ -65,25 +73,28 @@ module.exports = async function handler(req, res) {
 
     if (!baseUrl) return sendJson(res, 400, { error: "Missing client URL" });
 
-    const line_items = safeItems.map((item) => ({
-      quantity: Math.max(1, Number(item.qty || 1)),
-      price_data: {
-        currency: "eur",
-        product_data: {
-          name: item.name || "Product",
-          ...(item.imageUrl ? { images: [item.imageUrl] } : {}),
-        },
-        unit_amount: Math.round(Number(item.price || 0) * 100),
-      },
-    }));
+    const params = new URLSearchParams();
+    params.append("mode", "payment");
+    params.append("success_url", `${baseUrl}/cart?paid=1&orderId=${encodeURIComponent(orderId)}`);
+    params.append("cancel_url", `${baseUrl}/cart?canceled=1&orderId=${encodeURIComponent(orderId)}`);
+    params.append("metadata[orderId]", orderId);
+    safeItems.forEach((item, index) => appendLineItem(params, item, index));
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      line_items,
-      success_url: `${baseUrl}/cart?paid=1&orderId=${encodeURIComponent(orderId)}`,
-      cancel_url: `${baseUrl}/cart?canceled=1&orderId=${encodeURIComponent(orderId)}`,
-      metadata: { orderId },
+    const stripeRes = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${stripeSecretKey}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params,
     });
+
+    const session = await stripeRes.json().catch(() => ({}));
+    if (!stripeRes.ok || !session.url) {
+      return sendJson(res, stripeRes.status || 500, {
+        error: session?.error?.message || "Failed to create Stripe checkout session",
+      });
+    }
 
     return sendJson(res, 200, { url: session.url });
   } catch (error) {
