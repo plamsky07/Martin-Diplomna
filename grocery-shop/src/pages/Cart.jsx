@@ -9,6 +9,18 @@ import { useCart } from "../context/CartContext";
 import { formatMoneyEUR } from "../utils/money";
 
 const STRIPE_ENABLED = import.meta.env.VITE_STRIPE_ENABLED === "true";
+const CHECKOUT_PATH = import.meta.env.VITE_STRIPE_CREATE_CHECKOUT_URL || "/api/create-checkout-session";
+
+function getCheckoutUrl() {
+  if (/^https?:\/\//i.test(CHECKOUT_PATH)) return CHECKOUT_PATH;
+
+  const canonicalOrigin =
+    window.location.hostname === "ezirup.vercel.app"
+      ? "https://ezigrup.vercel.app"
+      : window.location.origin;
+
+  return `${canonicalOrigin}${CHECKOUT_PATH.startsWith("/") ? "" : "/"}${CHECKOUT_PATH}`;
+}
 
 export default function Cart() {
   const { user } = useAuth();
@@ -72,7 +84,7 @@ export default function Cart() {
         createdAt: serverTimestamp(),
       });
 
-      const res = await fetch(import.meta.env.VITE_STRIPE_CREATE_CHECKOUT_URL, {
+      const res = await fetch(getCheckoutUrl(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -91,7 +103,7 @@ export default function Cart() {
       if (orderRef?.id) {
         await deleteDoc(doc(db, "orders", orderRef.id)).catch(() => {});
       }
-      setErr("Stripe checkout не е активен в момента. Backend функцията връща CORS грешка и трябва да се deploy-не наново.");
+      setErr(e.message || "Stripe checkout не е активен в момента. Опитай пак след малко.");
       setPaying(false);
     }
   };
