@@ -50,7 +50,7 @@ function RouteTransitionOverlay({ show }) {
   return (
     <div className={`routeTransitionOverlay${show ? " show" : ""}`} aria-hidden={!show}>
       <div className="routeTransitionLogo" role="status" aria-live="polite">
-        <span className="routeTransitionMark">Е</span>
+        <img className="routeTransitionMark" src="/logo.png" alt="" />
         <span className="routeTransitionText">ЕзиГруп</span>
       </div>
     </div>

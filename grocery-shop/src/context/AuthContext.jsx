@@ -87,7 +87,18 @@ const login = async (email, password) => {
   };
 
   const resetPassword = async (email) => {
-    await sendPasswordResetEmail(auth, email);
+    const normalizedEmail = email.trim();
+    const resetUrl = import.meta.env.VITE_PASSWORD_RESET_URL;
+
+    if (resetUrl) {
+      await sendPasswordResetEmail(auth, normalizedEmail, {
+        url: resetUrl,
+        handleCodeInApp: false,
+      });
+      return;
+    }
+
+    await sendPasswordResetEmail(auth, normalizedEmail);
   };
 
   // ✅ промяна на username от settings

@@ -15,14 +15,25 @@ export default function ForgotPassword() {
     setMsg("");
     setErr("");
 
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setErr("Въведи email адрес.");
+      return;
+    }
+
     try {
-      await resetPassword(email);
+      await resetPassword(trimmedEmail);
       setMsg("Изпратихме линк за смяна на паролата на този email.");
+      setEmail(trimmedEmail);
     } catch (error) {
       const code = error.code;
 
       if (code === "auth/invalid-email") setErr("Невалиден email адрес.");
       else if (code === "auth/user-not-found") setErr("Няма акаунт с този email.");
+      else if (code === "auth/unauthorized-continue-uri") {
+        setErr("Домейнът на сайта не е разрешен във Firebase Authentication.");
+      }
+      else if (code === "auth/too-many-requests") setErr("Твърде много опити. Опитай пак след малко.");
       else setErr("Грешка при изпращане. Опитай пак.");
       console.log("RESET ERROR:", code, error.message);
     }
@@ -39,9 +50,12 @@ export default function ForgotPassword() {
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
         <input
           className="input"
+          type="email"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
+          required
         />
 
         {msg && <div className="success">{msg}</div>}
