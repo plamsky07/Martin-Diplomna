@@ -25,23 +25,23 @@ function readLocalEnv(name) {
 }
 
 module.exports = async function handler(req, res) {
-  setCors(res);
-
-  if (req.method === "OPTIONS") {
-    return res.status(204).end();
-  }
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
-  const stripeSecretKey = process.env.STRIPE_SECRET_KEY || readLocalEnv("STRIPE_SECRET_KEY");
-
-  if (!stripeSecretKey) {
-    return res.status(500).json({ error: "Missing STRIPE_SECRET_KEY" });
-  }
-
   try {
+    setCors(res);
+
+    if (req.method === "OPTIONS") {
+      return res.status(204).end();
+    }
+
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "Method not allowed" });
+    }
+
+    const stripeSecretKey = process.env.STRIPE_SECRET_KEY || readLocalEnv("STRIPE_SECRET_KEY");
+
+    if (!stripeSecretKey) {
+      return res.status(500).json({ error: "Missing STRIPE_SECRET_KEY" });
+    }
+
     const stripe = new Stripe(stripeSecretKey, {
       apiVersion: "2026-02-25.clover",
     });
@@ -81,6 +81,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ url: session.url });
   } catch (error) {
     console.error("Stripe checkout error:", error);
+    setCors(res);
     return res.status(500).json({ error: error.message || "Failed to create checkout session" });
   }
 };
