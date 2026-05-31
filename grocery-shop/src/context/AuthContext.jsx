@@ -88,7 +88,8 @@ const login = async (email, password) => {
 
   const resetPassword = async (email) => {
     const normalizedEmail = email.trim();
-    const resetUrl = import.meta.env.VITE_PASSWORD_RESET_URL;
+    const authDomain = import.meta.env.VITE_FB_AUTH_DOMAIN;
+    const resetUrl = import.meta.env.VITE_PASSWORD_RESET_URL || (authDomain ? `https://${authDomain}` : "");
 
     if (resetUrl) {
       await sendPasswordResetEmail(auth, normalizedEmail, {

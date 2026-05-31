@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, query, doc, updateDoc } from "firebase/firestore";
-import { sendPasswordResetEmail } from "firebase/auth";
-import { auth, db } from "../../firebase";
+import { db } from "../../firebase";
 import { useAuth } from "../../context/AuthContext";
 
 export default function AdminUsers() {
-  const { user, profile } = useAuth();
+  const { user, profile, resetPassword } = useAuth();
 
   const [users, setUsers] = useState([]);
   const [qText, setQText] = useState("");
@@ -59,18 +58,23 @@ export default function AdminUsers() {
 
   const resetUserPassword = async (email) => {
     setMsg(""); setErr("");
-    if (!email) return setErr("Няма email за този потребител.");
+    const cleanEmail = (email || "").trim();
+    if (!cleanEmail) return setErr("Няма email за този потребител.");
 
-    const ok = confirm(`Да изпратя линк за смяна на парола на:\n${email} ?`);
+    const ok = confirm(`Да изпратя линк за смяна на парола на:\n${cleanEmail} ?`);
     if (!ok) return;
 
     try {
-      await sendPasswordResetEmail(auth, email);
-      setMsg(`Reset email е изпратен до ${email} ✅`);
+      await resetPassword(cleanEmail);
+      setMsg(`Reset email е изпратен до ${cleanEmail} ✅ Провери и Spam/Promotions.`);
     } catch (e) {
       console.log(e);
-      // често срещано: auth/invalid-email, auth/too-many-requests
-      setErr("Не успях да изпратя reset email. Провери Auth настройки или email-а.");
+      const code = e?.code || "";
+      if (code === "auth/invalid-email") setErr("Невалиден email адрес.");
+      else if (code === "auth/user-not-found") setErr("Няма Firebase Auth акаунт с този email.");
+      else if (code === "auth/unauthorized-continue-uri") setErr("Reset домейнът не е разрешен във Firebase Authentication.");
+      else if (code === "auth/too-many-requests") setErr("Твърде много опити. Опитай пак след малко.");
+      else setErr(`Не успях да изпратя reset email${code ? ` (${code})` : ""}.`);
     }
   };
 
