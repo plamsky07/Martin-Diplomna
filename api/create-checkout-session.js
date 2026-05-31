@@ -55,7 +55,9 @@ module.exports = async function handler(req, res) {
       return sendJson(res, 405, { error: "Method not allowed" });
     }
 
-    const stripeSecretKey = process.env.STRIPE_SECRET_KEY || readLocalEnv("STRIPE_SECRET_KEY");
+    const stripeSecretKey = (process.env.STRIPE_SECRET_KEY || readLocalEnv("STRIPE_SECRET_KEY"))
+      .replace(/^\uFEFF/, "")
+      .trim();
 
     if (!stripeSecretKey) {
       return sendJson(res, 500, { error: "Missing STRIPE_SECRET_KEY" });
